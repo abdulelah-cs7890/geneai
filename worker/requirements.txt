@@ -1,0 +1,15 @@
+# Local/reference deps for the Modal worker. The container image in
+# modal_app.py installs its own copy; this file is for editor tooling and for
+# running pieces of the pipeline outside Modal.
+modal>=1.0
+requests>=2.31
+boto3>=1.34
+# Model stage (uncomment as you wire them in):
+# torch
+# torchvision
+# opencv-python-headless
+# numpy
+# pillow
+# diffusers
+# transformers
+# onnxruntime-gpu
