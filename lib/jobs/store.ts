@@ -22,6 +22,9 @@ export async function getJobStore(): Promise<JobStore> {
   if (config.jobStore === "redis") {
     const { RedisJobStore } = await import("./redis-store");
     cached = new RedisJobStore();
+  } else if (config.jobStore === "supabase") {
+    const { SupabaseJobStore } = await import("./supabase-store");
+    cached = new SupabaseJobStore();
   } else {
     const { LocalJobStore } = await import("./local-store");
     cached = new LocalJobStore();

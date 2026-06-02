@@ -10,8 +10,15 @@ import path from "node:path";
  * code talks to Upstash + R2 + a Modal GPU worker.
  */
 export const config = {
-  /** Upstash Redis if configured, else a file-backed local store. */
-  jobStore: process.env.UPSTASH_REDIS_REST_URL ? ("redis" as const) : ("local" as const),
+  /**
+   * Job store: Upstash Redis if configured, else Supabase Postgres (reuses the
+   * storage project — no Redis needed), else a file-backed local store.
+   */
+  jobStore: process.env.UPSTASH_REDIS_REST_URL
+    ? ("redis" as const)
+    : process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? ("supabase" as const)
+      : ("local" as const),
 
   /**
    * Blob storage: Supabase (free, no card — the live-demo default) if configured,
