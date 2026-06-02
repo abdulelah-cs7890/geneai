@@ -70,6 +70,15 @@
       radial-gradient(circle at 50% 50%, #11131c 0%, #0c0e17 100%);
     background-attachment: fixed;
   }
+
+  /* Tailwind v4 Preflight no longer sets cursor:pointer on buttons — restore it
+     for interactive elements (disabled keep the default / not-allowed). */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
 }
 
 @layer components {

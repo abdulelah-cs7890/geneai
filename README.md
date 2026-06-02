@@ -30,6 +30,26 @@ any compute is dispatched.
 
 ---
 
+## Testing
+
+**Automated end-to-end** — with the dev server running, in another terminal:
+
+```bash
+npm run smoke -- http://localhost:3000   # use the port next dev prints
+```
+
+It synthesizes a test clip with the bundled ffmpeg, then drives the real flow
+(presign upload URLs → PUT to storage → create job → poll to `done` → fetch the
+result) and asserts the NSFW reject path fires. Exits non-zero on failure, so it
+works in CI. Point it at the live URL to smoke-test production:
+`npm run smoke -- https://your-app.vercel.app`.
+
+**Manual** — open the app, upload a short clip + a portrait, hit Generate, watch
+the stage timeline, and download the result. Resize the window to check the
+responsive bento/nav.
+
+---
+
 ## Architecture in one diagram
 
 ```
