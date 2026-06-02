@@ -39,4 +39,15 @@ export class R2Storage implements Storage {
   url(key: string): string {
     return `${this.publicBase}/${key}`;
   }
+
+  // SigV4 query-signed PUT URL so the browser uploads straight to R2, bypassing
+  // the serverless body-size limit. Content-Type is left unsigned so the client
+  // can set it freely on the PUT.
+  async presignPut(key: string): Promise<string> {
+    const signed = await this.client.sign(`${this.endpoint}/${key}?X-Amz-Expires=3600`, {
+      method: "PUT",
+      aws: { signQuery: true },
+    });
+    return signed.url;
+  }
 }

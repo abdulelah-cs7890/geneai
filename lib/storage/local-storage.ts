@@ -31,4 +31,10 @@ export class LocalStorage implements Storage {
   url(key: string): string {
     return `/api/files/${key.split("/").map(encodeURIComponent).join("/")}`;
   }
+
+  // Locally there's nothing to presign — the /api/files route accepts PUT and
+  // writes to disk, so the browser uses the same direct-upload flow as R2.
+  async presignPut(key: string): Promise<string> {
+    return this.url(key);
+  }
 }

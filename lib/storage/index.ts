@@ -12,6 +12,12 @@ export interface Storage {
   get(key: string): Promise<Buffer>;
   /** Resolve the public/served URL for a key without fetching it. */
   url(key: string): string;
+  /**
+   * Return a URL the browser can `PUT` bytes to directly, so large video never
+   * passes through the (size-limited) serverless function. R2 returns a SigV4
+   * presigned URL; local returns the /api/files route (which accepts PUT).
+   */
+  presignPut(key: string, contentType: string): Promise<string>;
 }
 
 let cached: Storage | null = null;

@@ -28,6 +28,12 @@ export const config = {
   /** Max upload size accepted by the API (bytes). */
   maxUploadBytes: 60 * 1024 * 1024, // 60 MB
 
+  /** Global cap on generations per day (protects finite GPU credits). */
+  dailyCap: Number(process.env.DAILY_GENERATION_CAP ?? 100),
+
+  /** Per-IP request limit per minute for the upload/create endpoints. */
+  rateLimitPerMin: Number(process.env.RATE_LIMIT_PER_MIN ?? 10),
+
   /** Shared secret the Modal worker uses to authenticate webhook callbacks. */
   webhookSecret: process.env.WORKER_WEBHOOK_SECRET ?? "dev-secret",
 

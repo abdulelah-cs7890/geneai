@@ -5,6 +5,7 @@ import { getCompute } from "@/lib/compute";
 import { getJobStore } from "@/lib/jobs/store";
 import type { Job } from "@/lib/jobs/types";
 import { moderateUpload } from "@/lib/moderation";
+import { consumeDailyQuota, rateLimit } from "@/lib/ratelimit";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -15,8 +16,21 @@ const optionsSchema = z.object({
   watermark: z.boolean().default(true),
 });
 
-const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+/**
+ * Body posted after the browser has already uploaded both files directly to
+ * storage via the presigned URLs from /api/upload-url. We never receive the
+ * bytes here — only the keys + metadata.
+ */
+const schema = z.object({
+  jobId: z.string().uuid(),
+  driverKey: z.string().min(1),
+  characterKey: z.string().min(1),
+  driverName: z.string().default("driver"),
+  characterName: z.string().default("character"),
+  driverType: z.string().default("video/mp4"),
+  characterType: z.string().default("image/jpeg"),
+  options: optionsSchema.default({ addSubtitles: false, addHypeAudio: false, watermark: true }),
+});
 
 /** GET /api/jobs — recent jobs feed for the history rail. */
 export async function GET() {
@@ -24,57 +38,43 @@ export async function GET() {
   return NextResponse.json({ jobs: await store.list(12) });
 }
 
-/** POST /api/jobs — create a job from a driver video + character image. */
+/** POST /api/jobs — create a job from already-uploaded driver + character keys. */
 export async function POST(req: Request) {
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+  const limited = await rateLimit(req);
+  if (limited) return limited;
+
+  const parsed = schema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+  const { jobId, driverKey, characterKey, driverName, characterName, driverType, characterType, options } =
+    parsed.data;
+
+  // Keys must belong to this jobId — stops a client pointing the job at someone
+  // else's objects.
+  if (!driverKey.startsWith(`${jobId}/`) || !characterKey.startsWith(`${jobId}/`)) {
+    return NextResponse.json({ error: "Keys do not match jobId." }, { status: 400 });
   }
 
-  const driver = form.get("driver");
-  const character = form.get("character");
-  if (!(driver instanceof File) || !(character instanceof File)) {
-    return NextResponse.json({ error: "Both 'driver' video and 'character' image are required." }, { status: 400 });
-  }
+  // Consume one unit of the daily generation quota (the expensive action).
+  const overQuota = await consumeDailyQuota();
+  if (overQuota) return overQuota;
 
-  const options = optionsSchema.parse(JSON.parse((form.get("options") as string) || "{}"));
-
-  const checks = [
-    [driver, VIDEO_TYPES, "driver video"] as const,
-    [character, IMAGE_TYPES, "character image"] as const,
-  ];
-  for (const [file, types, label] of checks) {
-    if (file.size > config.maxUploadBytes) {
-      return NextResponse.json({ error: `${label} exceeds ${config.maxUploadBytes / 1024 / 1024}MB limit.` }, { status: 413 });
-    }
-    if (!types.includes(file.type)) {
-      return NextResponse.json({ error: `${label} must be one of: ${types.join(", ")}.` }, { status: 415 });
-    }
-  }
-
-  const id = crypto.randomUUID();
   const storage = await getStorage();
   const store = await getJobStore();
   const now = Date.now();
 
-  const driverKey = `${id}/driver${extFor(driver, ".mp4")}`;
-  const characterKey = `${id}/character${extFor(character, ".jpg")}`;
-  const driverUrl = await storage.put(driverKey, Buffer.from(await driver.arrayBuffer()), driver.type);
-  const characterUrl = await storage.put(characterKey, Buffer.from(await character.arrayBuffer()), character.type);
-
   // Safety gate runs BEFORE any compute is dispatched (no GPU spend on rejects).
-  const moderation = await moderateUpload([driver.name, character.name]);
+  const moderation = await moderateUpload([driverName, characterName]);
 
   const base: Job = {
-    id,
+    id: jobId,
     status: "queued",
     progress: 0,
     createdAt: now,
     updatedAt: now,
-    driverVideo: { key: driverKey, url: driverUrl, contentType: driver.type },
-    characterImage: { key: characterKey, url: characterUrl, contentType: character.type },
+    driverVideo: { key: driverKey, url: storage.url(driverKey), contentType: driverType },
+    characterImage: { key: characterKey, url: storage.url(characterKey), contentType: characterType },
     options,
     backend: config.compute,
     logs: [{ at: now, stage: "moderating", message: "Running safety gate before GPU dispatch…" }],
@@ -91,19 +91,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ job: rejected }, { status: 200 });
   }
 
-  const job = await store.create({
+  await store.create({
     ...base,
     moderation,
     logs: [...base.logs, { at: Date.now(), stage: "queued", message: "Passed safety gate. Queued for generation." }],
   });
 
   const compute = await getCompute();
-  await compute.dispatch(id);
+  await compute.dispatch(jobId);
 
-  return NextResponse.json({ job: await store.get(id) }, { status: 201 });
-}
-
-function extFor(file: File, fallback: string): string {
-  const m = /\.[a-z0-9]+$/i.exec(file.name);
-  return m ? m[0].toLowerCase() : fallback;
+  return NextResponse.json({ job: await store.get(jobId) }, { status: 201 });
 }

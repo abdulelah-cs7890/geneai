@@ -6,6 +6,12 @@ import { PIPELINE_STAGES, stageIndex } from "@/lib/jobs/stage-meta";
 import { isTerminal, type Job, type JobOptions } from "@/lib/jobs/types";
 
 const POLL_MS = 1500;
+const MAX_UPLOAD_MB = 60; // keep in sync with config.maxUploadBytes
+
+async function putFile(url: string, file: File): Promise<void> {
+  const res = await fetch(url, { method: "PUT", headers: { "content-type": file.type }, body: file });
+  if (!res.ok) throw new Error(`Direct upload failed (${res.status}).`);
+}
 
 export function Studio({ backend }: { backend: "mock" | "modal" }) {
   const [driver, setDriver] = useState<File | null>(null);
@@ -31,13 +37,48 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
   async function submit() {
     if (!driver || !character) return;
     setError(null);
+
+    for (const f of [driver, character]) {
+      if (f.size > MAX_UPLOAD_MB * 1024 * 1024) {
+        setError(`"${f.name}" is over the ${MAX_UPLOAD_MB}MB limit.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const body = new FormData();
-      body.append("driver", driver);
-      body.append("character", character);
-      body.append("options", JSON.stringify(options));
-      const res = await fetch("/api/jobs", { method: "POST", body });
+      // 1. Ask the server for presigned upload targets.
+      const urlRes = await fetch("/api/upload-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          driverName: driver.name,
+          driverType: driver.type,
+          characterName: character.name,
+          characterType: character.type,
+        }),
+      });
+      const upload = await urlRes.json();
+      if (!urlRes.ok) throw new Error(upload.error ?? "Could not start upload.");
+
+      // 2. Upload both files straight to storage (never through the function).
+      await Promise.all([putFile(upload.driver.putUrl, driver), putFile(upload.character.putUrl, character)]);
+
+      // 3. Create the job from the uploaded keys.
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jobId: upload.jobId,
+          driverKey: upload.driver.key,
+          characterKey: upload.character.key,
+          driverName: driver.name,
+          characterName: character.name,
+          driverType: driver.type,
+          characterType: character.type,
+          options,
+        }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
 
