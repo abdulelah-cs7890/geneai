@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { config } from "@/lib/config";
 import { getCompute } from "@/lib/compute";
-import { getJobStore } from "@/lib/jobs/store";
+import { advance, getJobStore } from "@/lib/jobs/store";
 import type { Job } from "@/lib/jobs/types";
 import { moderateUpload } from "@/lib/moderation";
 import { consumeDailyQuota, rateLimit } from "@/lib/ratelimit";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
+// Allow the in-function FFmpeg render (run via after()) up to a minute on Vercel.
+export const maxDuration = 60;
 
 const optionsSchema = z.object({
   addSubtitles: z.boolean().default(false),
@@ -97,8 +99,18 @@ export async function POST(req: Request) {
     logs: [...base.logs, { at: Date.now(), stage: "queued", message: "Passed safety gate. Queued for generation." }],
   });
 
+  // Process in the background so the API responds immediately and the UI polls
+  // for progress. `after()` keeps the function alive on Vercel until it finishes.
   const compute = await getCompute();
-  await compute.dispatch(jobId);
+  after(async () => {
+    try {
+      await compute.dispatch(jobId);
+    } catch (err) {
+      await advance(store, jobId, "failed", `Pipeline error: ${(err as Error).message}`, {
+        error: (err as Error).message,
+      });
+    }
+  });
 
   return NextResponse.json({ job: await store.get(jobId) }, { status: 201 });
 }

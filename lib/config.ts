@@ -13,8 +13,16 @@ export const config = {
   /** Upstash Redis if configured, else a file-backed local store. */
   jobStore: process.env.UPSTASH_REDIS_REST_URL ? ("redis" as const) : ("local" as const),
 
-  /** Cloudflare R2 (S3 API) if configured, else local disk under ./data. */
-  storage: process.env.R2_ACCOUNT_ID && process.env.R2_BUCKET ? ("r2" as const) : ("local" as const),
+  /**
+   * Blob storage: Supabase (free, no card — the live-demo default) if configured,
+   * else Cloudflare R2 (needs a card), else local disk under ./data.
+   */
+  storage:
+    process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? ("supabase" as const)
+      : process.env.R2_ACCOUNT_ID && process.env.R2_BUCKET
+        ? ("r2" as const)
+        : ("local" as const),
 
   /** Modal serverless GPU worker if configured, else the local FFmpeg mock. */
   compute: process.env.MODAL_ENDPOINT_URL ? ("modal" as const) : ("mock" as const),

@@ -20,14 +20,11 @@ export class MockCompute implements ComputeBackend {
   readonly name = "mock" as const;
 
   async dispatch(jobId: string): Promise<void> {
-    // Fire-and-forget: return immediately so the API responds fast and the UI
-    // polls for progress, exactly like the async Modal path.
-    void this.process(jobId).catch(async (err) => {
-      const store = await getJobStore();
-      await advance(store, jobId, "failed", `Pipeline error: ${(err as Error).message}`, {
-        error: (err as Error).message,
-      });
-    });
+    // Runs the pipeline to completion. The caller backgrounds this via Next's
+    // `after()`, which keeps the serverless function alive on Vercel until the
+    // render finishes — no separate GPU/worker service needed. Errors propagate
+    // to the route, which marks the job failed.
+    await this.process(jobId);
   }
 
   private async process(jobId: string): Promise<void> {

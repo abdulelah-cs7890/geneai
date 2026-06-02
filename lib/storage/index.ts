@@ -24,7 +24,10 @@ let cached: Storage | null = null;
 
 export async function getStorage(): Promise<Storage> {
   if (cached) return cached;
-  if (config.storage === "r2") {
+  if (config.storage === "supabase") {
+    const { SupabaseStorage } = await import("./supabase-storage");
+    cached = new SupabaseStorage();
+  } else if (config.storage === "r2") {
     const { R2Storage } = await import("./r2-storage");
     cached = new R2Storage();
   } else {
