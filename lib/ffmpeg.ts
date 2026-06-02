@@ -1,12 +1,9 @@
 import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
-import { path as ffprobePath } from "ffprobe-static";
 
 /**
- * Thin FFmpeg/FFprobe wrapper around the bundled static binaries, so local dev
- * needs no system install. In production the same normalization runs inside the
- * Modal worker (in Python) — this Node copy powers the local "mock" backend and
- * any client-adjacent probing.
+ * Thin FFmpeg wrapper around the bundled static binary, so local dev needs no
+ * system install and the Vercel function carries only the (linux) ffmpeg binary.
  */
 
 function run(bin: string, args: string[]): Promise<string> {
@@ -20,21 +17,6 @@ function run(bin: string, args: string[]): Promise<string> {
       else reject(new Error(`${bin} exited ${code}\n${stderr.slice(-2000)}`));
     });
   });
-}
-
-/** Probe a media file's duration in seconds. */
-export async function probeDuration(input: string): Promise<number> {
-  const out = await run(ffprobePath, [
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "default=noprint_wrappers=1:nokey=1",
-    input,
-  ]);
-  const seconds = parseFloat(out.trim());
-  return Number.isFinite(seconds) ? seconds : 0;
 }
 
 export interface ComposeOptions {

@@ -1,15 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Keep the bundled FFmpeg/FFprobe binaries external so their `__dirname`-based
-  // paths resolve to the real node_modules location at runtime instead of being
-  // rewritten to a "\ROOT\" placeholder by the bundler.
-  serverExternalPackages: ["ffmpeg-static", "ffprobe-static"],
+  // Keep the bundled FFmpeg binary external so its `__dirname`-based path resolves
+  // to the real node_modules location at runtime instead of being rewritten to a
+  // "\ROOT\" placeholder by the bundler.
+  serverExternalPackages: ["ffmpeg-static"],
 
-  // Ship the actual binaries inside the /api/jobs serverless function (where the
-  // pipeline runs via after()) — Next's file tracing won't include them otherwise.
+  // Ship the single (current-platform) ffmpeg binary inside the /api/jobs function
+  // where the pipeline runs via after(). We include only the binary file — not the
+  // whole package, and never ffprobe-static (all-platform bins → 250MB blowup).
   outputFileTracingIncludes: {
-    "/api/jobs": ["./node_modules/ffmpeg-static/**", "./node_modules/ffprobe-static/**"],
+    "/api/jobs": ["./node_modules/ffmpeg-static/ffmpeg*"],
   },
 };
 
