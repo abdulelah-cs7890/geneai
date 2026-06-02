@@ -41,10 +41,10 @@ export function Dropzone({ label, accept, kind, file, onFile }: DropzoneProps) {
         if (f) setSelected(f);
       }}
       onClick={() => inputRef.current?.click()}
-      className={`group relative flex aspect-[9/16] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition ${
+      className={`group relative flex aspect-[3/4] cursor-pointer flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl border-2 border-dashed transition ${
         dragging
-          ? "border-fuchsia-400 bg-fuchsia-500/10"
-          : "border-white/15 bg-white/[0.03] hover:border-white/30 hover:bg-white/[0.06]"
+          ? "border-primary bg-primary/10"
+          : "border-white/15 bg-white/[0.02] hover:border-primary/50 hover:bg-primary/5"
       }`}
     >
       <input
@@ -63,14 +63,21 @@ export function Dropzone({ label, accept, kind, file, onFile }: DropzoneProps) {
         <img src={preview} alt={label} className="absolute inset-0 h-full w-full object-cover" />
       )}
 
+      {!preview && (
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 transition-transform group-hover:scale-110">
+          <span className="material-symbols-outlined text-4xl text-primary">
+            {kind === "video" ? "movie" : "face"}
+          </span>
+        </div>
+      )}
+
       <div
         className={`relative z-10 flex flex-col items-center gap-1 px-4 text-center ${
-          preview ? "bg-black/45 rounded-xl py-2 backdrop-blur-sm" : ""
+          preview ? "rounded-xl bg-black/50 px-3 py-2 backdrop-blur-sm" : ""
         }`}
       >
-        <span className="text-2xl">{kind === "video" ? "🎬" : "🧑‍🎤"}</span>
-        <span className="text-sm font-medium text-white">{file ? file.name : label}</span>
-        <span className="text-xs text-white/50">
+        <span className="text-sm font-semibold text-on-surface">{file ? file.name : label}</span>
+        <span className="text-xs text-outline">
           {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB — click to replace` : "Drag & drop or click"}
         </span>
       </div>

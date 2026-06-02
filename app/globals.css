@@ -1,26 +1,110 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ------------------------------------------------------------------ *
+ * Design tokens — lime glassmorphism theme (translated from the mockup
+ * into Tailwind v4 @theme; no Tailwind Play CDN).
+ * ------------------------------------------------------------------ */
+@theme {
+  /* Fonts (vars set by next/font in layout.tsx) */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces */
+  --color-background: #11131c;
+  --color-surface: #11131c;
+  --color-surface-lowest: #0c0e17;
+  --color-surface-low: #191b24;
+  --color-surface-container: #1d1f29;
+  --color-surface-high: #282933;
+  --color-surface-variant: #32343e;
+  --color-surface-bright: #373943;
+
+  /* Accents */
+  --color-primary: #ccff00;
+  --color-on-primary: #000000;
+  --color-secondary: #d3fbff;
+  --color-secondary-container: #00eefc;
+  --color-tertiary: #fface8;
+  --color-tertiary-container: #d600c0;
+
+  /* Text / lines */
+  --color-on-surface: #e1e1ef;
+  --color-on-surface-variant: #d4c0d7;
+  --color-outline: #9d8ba0;
+  --color-outline-variant: #514255;
+  --color-error: #ffb4ab;
+
+  /* Type scale */
+  --text-headline-xl: 64px;
+  --text-headline-xl--line-height: 1.05;
+  --text-headline-xl--letter-spacing: -0.02em;
+  --text-headline-xl--font-weight: 700;
+
+  --text-headline-lg: 40px;
+  --text-headline-lg--line-height: 1.15;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 1.3;
+  --text-headline-md--font-weight: 600;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 1.6;
+
+  --text-label-sm: 12px;
+  --text-label-sm--line-height: 1;
+  --text-label-sm--letter-spacing: 0.1em;
+  --text-label-sm--font-weight: 600;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    min-height: 100vh;
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+    background:
+      radial-gradient(circle at 0% 0%, #242e00 0%, transparent 42%),
+      radial-gradient(circle at 100% 0%, #00363a 0%, transparent 42%),
+      radial-gradient(circle at 50% 50%, #11131c 0%, #0c0e17 100%);
+    background-attachment: fixed;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  /* Lift + glow only on non-interactive cards (e.g. "how it works"). */
+  .glass-card-hover {
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.35s, border-color 0.35s, box-shadow 0.35s;
+  }
+  .glass-card-hover:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(204, 255, 0, 0.35);
+    transform: translateY(-4px);
+    box-shadow: 0 0 30px rgba(204, 255, 0, 0.22);
+  }
+  .glow-primary {
+    box-shadow: 0 0 24px rgba(204, 255, 0, 0.35);
+  }
+  .glow-secondary {
+    box-shadow: 0 0 24px rgba(0, 238, 252, 0.35);
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  line-height: 1;
+  user-select: none;
 }

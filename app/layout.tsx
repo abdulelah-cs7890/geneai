@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "GeneAI — V2V Meme Studio",
-  description: "One-click video-to-video meme generator on an async serverless-GPU pipeline.",
+  description: "One-click video-to-video meme generator on an async serverless pipeline.",
 };
 
 export default function RootLayout({
@@ -23,11 +26,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[#0a0a12] text-white bg-[radial-gradient(60%_50%_at_50%_0%,rgba(168,85,247,0.12),transparent)]">
+    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}>
+      <body className="font-body flex min-h-full flex-col overflow-x-hidden">
+        {/* Material Symbols icon font — a global icon ligature font, the standard
+            exception to next/font; `display=block` avoids a flash of ligature text.
+            React 19 hoists this <link> to <head>. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font, @next/next/google-font-display */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
+        />
         {children}
       </body>
     </html>
