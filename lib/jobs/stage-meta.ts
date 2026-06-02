@@ -23,6 +23,7 @@ export const PIPELINE_STAGES: StageMeta[] = [
 export const FACESWAP_STAGES: StageMeta[] = [
   { status: "moderating", label: "Safety gate", hint: "NSFW check before the model" },
   { status: "generating", label: "Swapping face", hint: "Running the face-swap model on Hugging Face" },
+  { status: "stitching", label: "Enhancing", hint: "Restoring face detail (CodeFormer)" },
   { status: "done", label: "Ready", hint: "Download your swap" },
 ];
 

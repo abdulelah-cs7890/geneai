@@ -15,7 +15,7 @@ const STAGE_ICON: Record<JobStatus, string> = {
   normalizing: "crop",
   extracting_pose: "directions_run",
   generating: "auto_awesome",
-  stitching: "movie",
+  stitching: "auto_fix_high",
   done: "check_circle",
   failed: "error",
 };

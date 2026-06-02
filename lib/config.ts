@@ -36,6 +36,8 @@ export const config = {
 
   /** Hugging Face Space that powers real image face-swap (free, no card). */
   hfSpace: process.env.HF_FACESWAP_SPACE ?? "felixrosberg/face-swap",
+  /** HF Space for best-effort face restoration after the swap ("" disables it). */
+  hfRestoreSpace: process.env.HF_RESTORE_SPACE ?? "leonelhs/CodeFormer",
   /** Optional HF token for higher rate limits (anonymous works too). */
   hfToken: process.env.HF_TOKEN,
 
