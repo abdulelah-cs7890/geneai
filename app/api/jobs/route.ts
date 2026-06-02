@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { config } from "@/lib/config";
-import { getCompute } from "@/lib/compute";
+import { getCompute, getFaceSwapCompute } from "@/lib/compute";
 import { advance, getJobStore } from "@/lib/jobs/store";
 import type { Job } from "@/lib/jobs/types";
 import { moderateUpload } from "@/lib/moderation";
@@ -25,6 +25,7 @@ const optionsSchema = z.object({
  */
 const schema = z.object({
   jobId: z.string().uuid(),
+  mode: z.enum(["v2v", "faceswap"]).default("v2v"),
   driverKey: z.string().min(1),
   characterKey: z.string().min(1),
   driverName: z.string().default("driver"),
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const { jobId, driverKey, characterKey, driverName, characterName, driverType, characterType, options } =
+  const { jobId, mode, driverKey, characterKey, driverName, characterName, driverType, characterType, options } =
     parsed.data;
 
   // Keys must belong to this jobId — stops a client pointing the job at someone
@@ -72,14 +73,15 @@ export async function POST(req: Request) {
   const base: Job = {
     id: jobId,
     status: "queued",
+    mode,
     progress: 0,
     createdAt: now,
     updatedAt: now,
     driverVideo: { key: driverKey, url: storage.url(driverKey), contentType: driverType },
     characterImage: { key: characterKey, url: storage.url(characterKey), contentType: characterType },
     options,
-    backend: config.compute,
-    logs: [{ at: now, stage: "moderating", message: "Running safety gate before GPU dispatch…" }],
+    backend: mode === "faceswap" ? "hfswap" : config.compute,
+    logs: [{ at: now, stage: "moderating", message: "Running safety gate before generation…" }],
   };
 
   if (moderation.flagged) {
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
 
   // Process in the background so the API responds immediately and the UI polls
   // for progress. `after()` keeps the function alive on Vercel until it finishes.
-  const compute = await getCompute();
+  const compute = mode === "faceswap" ? await getFaceSwapCompute() : await getCompute();
   after(async () => {
     try {
       await compute.dispatch(jobId);

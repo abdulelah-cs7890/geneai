@@ -19,7 +19,23 @@ export const PIPELINE_STAGES: StageMeta[] = [
   { status: "done", label: "Ready", hint: "Download your meme" },
 ];
 
-/** Index of a status within the linear pipeline (−1 if off-track, e.g. failed). */
+/** Shorter pipeline for real image face-swap (HF Space). */
+export const FACESWAP_STAGES: StageMeta[] = [
+  { status: "moderating", label: "Safety gate", hint: "NSFW check before the model" },
+  { status: "generating", label: "Swapping face", hint: "Running the face-swap model on Hugging Face" },
+  { status: "done", label: "Ready", hint: "Download your swap" },
+];
+
+export function stagesFor(mode: "v2v" | "faceswap" | undefined): StageMeta[] {
+  return mode === "faceswap" ? FACESWAP_STAGES : PIPELINE_STAGES;
+}
+
+/** Index of a status within a given stage list (−1 if off-track, e.g. failed). */
+export function stageIndexIn(stages: StageMeta[], status: JobStatus): number {
+  return stages.findIndex((s) => s.status === status);
+}
+
+/** Index within the default V2V pipeline (kept for back-compat). */
 export function stageIndex(status: JobStatus): number {
-  return PIPELINE_STAGES.findIndex((s) => s.status === status);
+  return stageIndexIn(PIPELINE_STAGES, status);
 }

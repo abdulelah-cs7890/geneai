@@ -34,6 +34,11 @@ export const config = {
   /** Modal serverless GPU worker if configured, else the local FFmpeg mock. */
   compute: process.env.MODAL_ENDPOINT_URL ? ("modal" as const) : ("mock" as const),
 
+  /** Hugging Face Space that powers real image face-swap (free, no card). */
+  hfSpace: process.env.HF_FACESWAP_SPACE ?? "felixrosberg/face-swap",
+  /** Optional HF token for higher rate limits (anonymous works too). */
+  hfToken: process.env.HF_TOKEN,
+
   /** Local scratch dir for the file-backed store + disk storage (gitignored). */
   dataDir: path.join(process.cwd(), "data"),
 

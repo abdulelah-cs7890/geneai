@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropzone } from "./Dropzone";
-import { PIPELINE_STAGES, stageIndex } from "@/lib/jobs/stage-meta";
-import { isTerminal, type Job, type JobOptions, type JobStatus } from "@/lib/jobs/types";
+import { stageIndexIn, stagesFor } from "@/lib/jobs/stage-meta";
+import { isTerminal, type Job, type JobMode, type JobOptions, type JobStatus } from "@/lib/jobs/types";
 
 const POLL_MS = 1500;
 const MAX_UPLOAD_MB = 60; // keep in sync with config.maxUploadBytes
@@ -26,6 +26,7 @@ async function putFile(url: string, file: File): Promise<void> {
 }
 
 export function Studio({ backend }: { backend: "mock" | "modal" }) {
+  const [mode, setMode] = useState<JobMode>("faceswap");
   const [driver, setDriver] = useState<File | null>(null);
   const [character, setCharacter] = useState<File | null>(null);
   const [options, setOptions] = useState<JobOptions>({
@@ -46,6 +47,14 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
 
   useEffect(() => stopPolling, [stopPolling]);
 
+  function switchMode(next: JobMode) {
+    if (next === mode) return;
+    setMode(next);
+    setDriver(null);
+    setCharacter(null);
+    setError(null);
+  }
+
   async function submit() {
     if (!driver || !character) return;
     setError(null);
@@ -64,6 +73,7 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          mode,
           driverName: driver.name,
           driverType: driver.type,
           characterName: character.name,
@@ -82,6 +92,7 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           jobId: upload.jobId,
+          mode,
           driverKey: upload.driver.key,
           characterKey: upload.character.key,
           driverName: driver.name,
@@ -132,7 +143,7 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
 
   // ---- Tracking view -----------------------------------------------------
   if (job && job.status !== "rejected" && !isTerminal(job.status)) {
-    return <Tracking job={job} backend={backend} />;
+    return <Tracking job={job} />;
   }
 
   // ---- Rejected / failed -------------------------------------------------
@@ -140,9 +151,7 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
     const rejected = job.status === "rejected";
     return (
       <div className="glass-card mx-auto max-w-lg rounded-3xl p-10 text-center">
-        <span
-          className={`material-symbols-outlined text-5xl ${rejected ? "text-secondary-container" : "text-error"}`}
-        >
+        <span className={`material-symbols-outlined text-5xl ${rejected ? "text-secondary-container" : "text-error"}`}>
           {rejected ? "shield" : "error"}
         </span>
         <h3 className="font-display mt-4 text-xl font-semibold text-on-surface">
@@ -155,7 +164,7 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
           onClick={reset}
           className="mt-6 rounded-full bg-white/10 px-6 py-2.5 text-sm font-medium text-on-surface transition hover:bg-white/20"
         >
-          Try another clip
+          Try again
         </button>
       </div>
     );
@@ -163,57 +172,64 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
 
   // ---- Upload / compose view --------------------------------------------
   const ready = driver && character && !submitting;
+  const isFaceswap = mode === "faceswap";
   return (
     <div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
-        {/* Step 1 — Driver clip */}
-        <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
-          <StepHeader n="1" title="Driver clip" icon="movie" accent="primary" />
-          <Dropzone label="Upload action video" accept="video/*" kind="video" file={driver} onFile={setDriver} />
-          <div className="flex gap-4 text-xs text-outline">
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">timer</span> ≤ 15s
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">database</span> ≤ 60MB
-            </span>
-            <span className="text-on-surface/30">· the motion to copy</span>
+      <ModeTabs mode={mode} onChange={switchMode} />
+
+      {isFaceswap ? (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+          <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
+            <StepHeader n="1" title="Base image" icon="image" accent="primary" />
+            <Dropzone key="fs-base" label="Upload base photo" accept="image/*" kind="image" file={driver} onFile={setDriver} />
+            <p className="text-xs text-outline">The photo to swap a face into.</p>
+          </div>
+          <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
+            <StepHeader n="2" title="Face to swap in" icon="face" accent="secondary" />
+            <Dropzone key="fs-face" label="Upload a face" accept="image/*" kind="image" file={character} onFile={setCharacter} />
+            <p className="text-xs text-outline">This face gets placed onto the base photo.</p>
           </div>
         </div>
-
-        {/* Step 2 — Character */}
-        <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
-          <StepHeader n="2" title="Character" icon="face" accent="secondary" />
-          <Dropzone
-            label="Upload target face/body"
-            accept="image/*"
-            kind="image"
-            file={character}
-            onFile={setCharacter}
-          />
-          <p className="text-xs text-outline">The character to map the motion onto.</p>
-        </div>
-
-        {/* Step 3 — Style */}
-        <div className="glass-card rounded-3xl p-6 md:col-span-12">
-          <StepHeader n="3" title="Style" icon="tune" accent="tertiary" />
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Toggle
-              label="Flashing subtitles"
-              desc="CapCut-style one-word bursts"
-              on={options.addSubtitles}
-              onClick={() => setOptions((o) => ({ ...o, addSubtitles: !o.addSubtitles }))}
-            />
-            <Toggle
-              label="Hype audio drop"
-              desc="Mix a bass drop under the clip"
-              on={options.addHypeAudio}
-              onClick={() => setOptions((o) => ({ ...o, addHypeAudio: !o.addHypeAudio }))}
-            />
-            <Toggle label="Watermark" desc="Required on the free tier" on locked required />
+      ) : (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+          <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
+            <StepHeader n="1" title="Driver clip" icon="movie" accent="primary" />
+            <Dropzone key="v2v-driver" label="Upload action video" accept="video/*" kind="video" file={driver} onFile={setDriver} />
+            <div className="flex gap-4 text-xs text-outline">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">timer</span> ≤ 15s
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">database</span> ≤ 60MB
+              </span>
+              <span className="text-on-surface/30">· the motion to copy</span>
+            </div>
+          </div>
+          <div className="glass-card flex flex-col gap-5 rounded-3xl p-6 md:col-span-6">
+            <StepHeader n="2" title="Character" icon="face" accent="secondary" />
+            <Dropzone key="v2v-char" label="Upload target face/body" accept="image/*" kind="image" file={character} onFile={setCharacter} />
+            <p className="text-xs text-outline">The character to map the motion onto.</p>
+          </div>
+          <div className="glass-card rounded-3xl p-6 md:col-span-12">
+            <StepHeader n="3" title="Style" icon="tune" accent="tertiary" />
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Toggle
+                label="Flashing subtitles"
+                desc="CapCut-style one-word bursts"
+                on={options.addSubtitles}
+                onClick={() => setOptions((o) => ({ ...o, addSubtitles: !o.addSubtitles }))}
+              />
+              <Toggle
+                label="Hype audio drop"
+                desc="Mix a bass drop under the clip"
+                on={options.addHypeAudio}
+                onClick={() => setOptions((o) => ({ ...o, addHypeAudio: !o.addHypeAudio }))}
+              />
+              <Toggle label="Watermark" desc="Required on the free tier" on locked required />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <p className="mx-auto mt-6 max-w-md rounded-2xl border border-error/30 bg-error/10 px-4 py-2.5 text-center text-sm text-error">
@@ -227,14 +243,48 @@ export function Studio({ backend }: { backend: "mock" | "modal" }) {
           disabled={!ready}
           className="glow-primary font-display inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-secondary-container px-10 py-4 text-lg font-bold text-on-primary transition enabled:hover:scale-[1.03] enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <span className="material-symbols-outlined">bolt</span>
-          {submitting ? "Uploading…" : "Generate meme"}
+          <span className="material-symbols-outlined">{isFaceswap ? "swap_horiz" : "bolt"}</span>
+          {submitting ? "Working…" : isFaceswap ? "Swap face" : "Generate meme"}
         </button>
         <p className="flex items-center gap-1.5 text-label-sm uppercase text-outline">
-          <span className="material-symbols-outlined text-[14px]">terminal</span>
-          Compute: in-function FFmpeg
-          <span className="font-mono text-on-surface/50">({backend})</span>
+          <span className="material-symbols-outlined text-[14px]">{isFaceswap ? "smart_toy" : "terminal"}</span>
+          {isFaceswap ? (
+            <>Real AI · Hugging Face face-swap</>
+          ) : (
+            <>
+              Compute: in-function FFmpeg <span className="font-mono text-on-surface/50">({backend})</span>
+            </>
+          )}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function ModeTabs({ mode, onChange }: { mode: JobMode; onChange: (m: JobMode) => void }) {
+  const tabs: { id: JobMode; label: string; icon: string; sub: string }[] = [
+    { id: "faceswap", label: "Face swap", icon: "swap_horiz", sub: "real AI" },
+    { id: "v2v", label: "Motion", icon: "animation", sub: "preview" },
+  ];
+  return (
+    <div className="mb-8 flex justify-center">
+      <div className="glass-panel inline-flex gap-1 rounded-full p-1">
+        {tabs.map((t) => {
+          const active = mode === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => onChange(t.id)}
+              className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition ${
+                active ? "bg-primary text-on-primary" : "text-on-surface/60 hover:text-on-surface"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">{t.icon}</span>
+              {t.label}
+              <span className={`text-[10px] uppercase ${active ? "text-on-primary/70" : "text-outline"}`}>{t.sub}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -315,14 +365,17 @@ function Toggle({
   );
 }
 
-function Tracking({ job, backend }: { job: Job; backend: "mock" | "modal" }) {
-  const current = stageIndex(job.status);
+function Tracking({ job }: { job: Job }) {
+  const stages = stagesFor(job.mode);
+  const current = stageIndexIn(stages, job.status);
   const lastLog = job.logs[job.logs.length - 1];
   return (
     <div className="glass-panel mx-auto max-w-xl rounded-3xl p-8">
       <div className="mb-8">
         <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-display font-semibold text-on-surface">Generating your meme…</span>
+          <span className="font-display font-semibold text-on-surface">
+            {job.mode === "faceswap" ? "Swapping the face…" : "Generating your meme…"}
+          </span>
           <span className="font-mono text-primary">{job.progress}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -334,67 +387,83 @@ function Tracking({ job, backend }: { job: Job; backend: "mock" | "modal" }) {
       </div>
 
       <ol className="space-y-3">
-        {PIPELINE_STAGES.filter((s) => s.status !== "done").map((stage, i) => {
-          const state = i < current ? "done" : i === current ? "active" : "todo";
-          return (
-            <li key={stage.status} className="flex items-start gap-3">
-              <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
-                  state === "done"
-                    ? "bg-primary/20 text-primary"
-                    : state === "active"
-                      ? "bg-secondary-container/20 text-secondary-container"
-                      : "bg-white/5 text-on-surface/30"
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {state === "done" ? "check" : STAGE_ICON[stage.status]}
+        {stages
+          .filter((s) => s.status !== "done")
+          .map((stage, i) => {
+            const state = i < current ? "done" : i === current ? "active" : "todo";
+            return (
+              <li key={stage.status} className="flex items-start gap-3">
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+                    state === "done"
+                      ? "bg-primary/20 text-primary"
+                      : state === "active"
+                        ? "bg-secondary-container/20 text-secondary-container"
+                        : "bg-white/5 text-on-surface/30"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {state === "done" ? "check" : STAGE_ICON[stage.status]}
+                  </span>
                 </span>
-              </span>
-              <div>
-                <div className={`text-sm font-medium ${state === "todo" ? "text-on-surface/40" : "text-on-surface"}`}>
-                  {stage.label}
+                <div>
+                  <div className={`text-sm font-medium ${state === "todo" ? "text-on-surface/40" : "text-on-surface"}`}>
+                    {stage.label}
+                  </div>
+                  <div className="text-xs text-outline">{stage.hint}</div>
                 </div>
-                <div className="text-xs text-outline">{stage.hint}</div>
-              </div>
-            </li>
-          );
-        })}
+              </li>
+            );
+          })}
       </ol>
 
       <p className="mt-6 rounded-2xl bg-white/5 px-4 py-2.5 font-mono text-xs text-on-surface/50">
         {lastLog ? `› ${lastLog.message}` : "› working…"}
-        {backend === "mock" && <span className="text-on-surface/30"> (mock backend)</span>}
       </p>
     </div>
   );
 }
 
 function ResultView({ job, originalUrl, onReset }: { job: Job; originalUrl: string | null; onReset: () => void }) {
+  const isImage = (job.result?.contentType ?? "").startsWith("image");
+  const aspect = isImage ? "aspect-square" : "aspect-[9/16]";
   return (
     <div className="glass-card mx-auto max-w-3xl rounded-3xl p-6 sm:p-8">
       <div className="grid gap-6 sm:grid-cols-2">
         <figure className="space-y-2">
-          <figcaption className="text-label-sm uppercase text-outline">Original</figcaption>
-          {originalUrl && (
-            <video src={originalUrl} controls loop className="aspect-[9/16] w-full rounded-2xl bg-black object-cover" />
-          )}
+          <figcaption className="text-label-sm uppercase text-outline">{isImage ? "Base" : "Original"}</figcaption>
+          {originalUrl &&
+            (isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={originalUrl} alt="base" className={`${aspect} w-full rounded-2xl bg-black object-cover`} />
+            ) : (
+              <video src={originalUrl} controls loop className={`${aspect} w-full rounded-2xl bg-black object-cover`} />
+            ))}
         </figure>
         <figure className="space-y-2">
-          <figcaption className="text-label-sm uppercase text-primary">Meme</figcaption>
-          <video
-            src={job.result!.url}
-            controls
-            autoPlay
-            loop
-            className="aspect-[9/16] w-full rounded-2xl bg-black object-cover ring-2 ring-primary/50"
-          />
+          <figcaption className="text-label-sm uppercase text-primary">{isImage ? "Swapped" : "Meme"}</figcaption>
+          {isImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={job.result!.url}
+              alt="result"
+              className={`${aspect} w-full rounded-2xl bg-black object-cover ring-2 ring-primary/50`}
+            />
+          ) : (
+            <video
+              src={job.result!.url}
+              controls
+              autoPlay
+              loop
+              className={`${aspect} w-full rounded-2xl bg-black object-cover ring-2 ring-primary/50`}
+            />
+          )}
         </figure>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <a
           href={job.result!.url}
-          download={`geneai-${job.id}.mp4`}
+          download={`geneai-${job.id}${isImage ? "" : ".mp4"}`}
           className="glow-primary inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-secondary-container px-6 py-3 text-sm font-bold text-on-primary transition hover:brightness-110"
         >
           <span className="material-symbols-outlined text-[18px]">download</span>

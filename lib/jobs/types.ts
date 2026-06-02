@@ -46,21 +46,29 @@ export interface ModerationResult {
   score?: number;
 }
 
+/**
+ * What kind of generation a job runs:
+ * - "v2v": driver video + character image → meme clip (mock/Modal pipeline).
+ * - "faceswap": base image + source-face image → swapped image (real HF model).
+ */
+export type JobMode = "v2v" | "faceswap";
+
 export interface Job {
   id: string;
   status: JobStatus;
+  mode: JobMode;
   /** 0..100 across the whole pipeline, monotonically increasing. */
   progress: number;
   createdAt: number;
   updatedAt: number;
 
-  // inputs
+  // inputs (for faceswap: driverVideo = base image, characterImage = source face)
   driverVideo: JobAsset;
   characterImage: JobAsset;
   options: JobOptions;
 
   // which compute backend handled it (for the demo "how it works" panel)
-  backend: "mock" | "modal";
+  backend: "mock" | "modal" | "hfswap";
 
   // outputs / diagnostics
   result?: JobAsset;

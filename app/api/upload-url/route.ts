@@ -13,6 +13,7 @@ export const runtime = "nodejs";
  * calls POST /api/jobs with the returned keys.
  */
 const schema = z.object({
+  mode: z.enum(["v2v", "faceswap"]).default("v2v"),
   driverName: z.string().min(1),
   driverType: z.string(),
   characterName: z.string().min(1),
@@ -27,17 +28,21 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
-  const { driverName, driverType, characterName, characterType } = parsed.data;
+  const { mode, driverName, driverType, characterName, characterType } = parsed.data;
 
-  if (!VIDEO_TYPES.includes(driverType)) {
-    return NextResponse.json({ error: `Driver video must be one of: ${VIDEO_TYPES.join(", ")}.` }, { status: 415 });
+  // In faceswap mode the "driver" slot is the base image; in v2v it's the video.
+  const driverAllowed = mode === "faceswap" ? IMAGE_TYPES : VIDEO_TYPES;
+  if (!driverAllowed.includes(driverType)) {
+    const label = mode === "faceswap" ? "Base image" : "Driver video";
+    return NextResponse.json({ error: `${label} must be one of: ${driverAllowed.join(", ")}.` }, { status: 415 });
   }
   if (!IMAGE_TYPES.includes(characterType)) {
-    return NextResponse.json({ error: `Character image must be one of: ${IMAGE_TYPES.join(", ")}.` }, { status: 415 });
+    const label = mode === "faceswap" ? "Face image" : "Character image";
+    return NextResponse.json({ error: `${label} must be one of: ${IMAGE_TYPES.join(", ")}.` }, { status: 415 });
   }
 
   const jobId = crypto.randomUUID();
-  const driverKey = `${jobId}/driver${extFromName(driverName, ".mp4")}`;
+  const driverKey = `${jobId}/driver${extFromName(driverName, mode === "faceswap" ? ".jpg" : ".mp4")}`;
   const characterKey = `${jobId}/character${extFromName(characterName, ".jpg")}`;
 
   const storage = await getStorage();

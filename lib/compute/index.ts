@@ -9,12 +9,14 @@ import { config } from "@/lib/config";
  * The mock advances it in-process; Modal advances it via a webhook callback.
  */
 export interface ComputeBackend {
-  readonly name: "mock" | "modal";
+  readonly name: "mock" | "modal" | "hfswap";
   dispatch(jobId: string): Promise<void>;
 }
 
 let cached: ComputeBackend | null = null;
+let faceSwap: ComputeBackend | null = null;
 
+/** Backend for the V2V (video) pipeline: Modal if configured, else the FFmpeg mock. */
 export async function getCompute(): Promise<ComputeBackend> {
   if (cached) return cached;
   if (config.compute === "modal") {
@@ -25,4 +27,12 @@ export async function getCompute(): Promise<ComputeBackend> {
     cached = new MockCompute();
   }
   return cached;
+}
+
+/** Backend for real image face-swap (Hugging Face Space). */
+export async function getFaceSwapCompute(): Promise<ComputeBackend> {
+  if (faceSwap) return faceSwap;
+  const { HfSwapCompute } = await import("./hfswap-compute");
+  faceSwap = new HfSwapCompute();
+  return faceSwap;
 }

@@ -62,8 +62,8 @@ function Hero() {
         </span>
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-body-lg text-on-surface/70">
-        Upload a driver clip, pick a character, and map the motion onto them — one click. Built on a real async job
-        queue with swappable serverless backends.
+        Swap a face into any photo with real AI, or map motion onto a character — one click, on a real async job queue
+        with swappable serverless backends.
       </p>
     </section>
   );
