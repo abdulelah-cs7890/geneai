@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- static local gallery images */
 import { Studio } from "@/components/Studio";
 import { config } from "@/lib/config";
 
@@ -12,6 +13,7 @@ export default function Home() {
         <section id="studio" className="mt-12 scroll-mt-28">
           <Studio backend={config.compute} />
         </section>
+        <Examples />
         <HowItWorks />
       </main>
       <Footer />
@@ -30,6 +32,9 @@ function TopNav() {
         <nav className="hidden items-center gap-7 text-sm text-on-surface/70 md:flex">
           <a href="#studio" className="font-medium text-on-surface">
             Studio
+          </a>
+          <a href="#examples" className="transition-colors hover:text-on-surface">
+            Examples
           </a>
           <a href="#how-it-works" className="transition-colors hover:text-on-surface">
             How it works
@@ -65,6 +70,47 @@ function Hero() {
         Swap a face into any photo with real AI, or map motion onto a character — one click, on a real async job queue
         with swappable serverless backends.
       </p>
+    </section>
+  );
+}
+
+function Examples() {
+  const items = [1, 2, 3];
+  return (
+    <section id="examples" className="mt-24 scroll-mt-28">
+      <h2 className="font-display text-center text-headline-lg">Examples</h2>
+      <p className="mx-auto mt-3 max-w-xl text-center text-sm text-outline">
+        Real face-swaps straight from the pipeline (swap + CodeFormer restore). Faces are AI-generated — no real people.
+      </p>
+      <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+        {items.map((n) => (
+          <div key={n} className="glass-card glass-card-hover rounded-3xl p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <img
+                src={`/examples/ex${n}-face.jpg`}
+                alt="source face"
+                className="h-9 w-9 rounded-full object-cover ring-2 ring-secondary-container/60"
+              />
+              <span className="text-label-sm uppercase text-outline">Face in</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <figure className="flex-1">
+                <img src={`/examples/ex${n}-base.jpg`} alt="base" className="aspect-square w-full rounded-xl object-cover" />
+                <figcaption className="mt-1 text-center text-[10px] uppercase tracking-wide text-outline">Base</figcaption>
+              </figure>
+              <span className="material-symbols-outlined text-primary">arrow_forward</span>
+              <figure className="flex-1">
+                <img
+                  src={`/examples/ex${n}-after.webp`}
+                  alt="swapped result"
+                  className="aspect-square w-full rounded-xl object-cover ring-2 ring-primary/50"
+                />
+                <figcaption className="mt-1 text-center text-[10px] uppercase tracking-wide text-primary">Swapped</figcaption>
+              </figure>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
