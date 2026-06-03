@@ -1,87 +1,61 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { config } from "@/lib/config";
-import { getCompute, getFaceSwapCompute } from "@/lib/compute";
+import { getCompute } from "@/lib/compute";
 import { advance, getJobStore } from "@/lib/jobs/store";
 import type { Job } from "@/lib/jobs/types";
-import { moderateUpload } from "@/lib/moderation";
+import { moderatePrompt } from "@/lib/moderation";
 import { consumeDailyQuota, rateLimit } from "@/lib/ratelimit";
-import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
-// Allow the in-function FFmpeg render (run via after()) up to a minute on Vercel.
+// The FLUX call runs in the background via after(); give it room on Vercel.
 export const maxDuration = 60;
 
 const optionsSchema = z.object({
-  addSubtitles: z.boolean().default(false),
-  addHypeAudio: z.boolean().default(false),
-  watermark: z.boolean().default(true),
+  aspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
+  style: z.string().max(40).default(""),
 });
 
-/**
- * Body posted after the browser has already uploaded both files directly to
- * storage via the presigned URLs from /api/upload-url. We never receive the
- * bytes here — only the keys + metadata.
- */
 const schema = z.object({
-  jobId: z.string().uuid(),
-  mode: z.enum(["v2v", "faceswap"]).default("v2v"),
-  driverKey: z.string().min(1),
-  characterKey: z.string().min(1),
-  driverName: z.string().default("driver"),
-  characterName: z.string().default("character"),
-  driverType: z.string().default("video/mp4"),
-  characterType: z.string().default("image/jpeg"),
-  options: optionsSchema.default({ addSubtitles: false, addHypeAudio: false, watermark: true }),
+  prompt: z.string().trim().min(1).max(config.maxPromptLength),
+  options: optionsSchema.default({ aspect: "1:1", style: "" }),
 });
 
-/** GET /api/jobs — recent jobs feed for the history rail. */
+/** GET /api/jobs — recent jobs feed for the gallery/history. */
 export async function GET() {
   const store = await getJobStore();
   return NextResponse.json({ jobs: await store.list(12) });
 }
 
-/** POST /api/jobs — create a job from already-uploaded driver + character keys. */
+/** POST /api/jobs — create an image-generation job from a prompt. */
 export async function POST(req: Request) {
   const limited = await rateLimit(req);
   if (limited) return limited;
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    return NextResponse.json({ error: "Enter a prompt (1–600 characters)." }, { status: 400 });
   }
-  const { jobId, mode, driverKey, characterKey, driverName, characterName, driverType, characterType, options } =
-    parsed.data;
+  const { prompt, options } = parsed.data;
 
-  // Keys must belong to this jobId — stops a client pointing the job at someone
-  // else's objects.
-  if (!driverKey.startsWith(`${jobId}/`) || !characterKey.startsWith(`${jobId}/`)) {
-    return NextResponse.json({ error: "Keys do not match jobId." }, { status: 400 });
-  }
-
-  // Consume one unit of the daily generation quota (the expensive action).
   const overQuota = await consumeDailyQuota();
   if (overQuota) return overQuota;
 
-  const storage = await getStorage();
   const store = await getJobStore();
   const now = Date.now();
-
-  // Safety gate runs BEFORE any compute is dispatched (no GPU spend on rejects).
-  const moderation = await moderateUpload([driverName, characterName]);
+  const jobId = crypto.randomUUID();
+  const moderation = await moderatePrompt(prompt);
 
   const base: Job = {
     id: jobId,
     status: "queued",
-    mode,
+    prompt,
     progress: 0,
     createdAt: now,
     updatedAt: now,
-    driverVideo: { key: driverKey, url: storage.url(driverKey), contentType: driverType },
-    characterImage: { key: characterKey, url: storage.url(characterKey), contentType: characterType },
     options,
-    backend: mode === "faceswap" ? "hfswap" : config.compute,
-    logs: [{ at: now, stage: "moderating", message: "Running safety gate before generation…" }],
+    backend: "pollinations",
+    logs: [{ at: now, stage: "moderating", message: "Screening the prompt…" }],
   };
 
   if (moderation.flagged) {
@@ -98,17 +72,16 @@ export async function POST(req: Request) {
   await store.create({
     ...base,
     moderation,
-    logs: [...base.logs, { at: Date.now(), stage: "queued", message: "Passed safety gate. Queued for generation." }],
+    logs: [...base.logs, { at: Date.now(), stage: "queued", message: "Prompt cleared. Queued for generation." }],
   });
 
-  // Process in the background so the API responds immediately and the UI polls
-  // for progress. `after()` keeps the function alive on Vercel until it finishes.
-  const compute = mode === "faceswap" ? await getFaceSwapCompute() : await getCompute();
+  // Background the FLUX call so the API responds immediately and the UI polls.
+  const compute = await getCompute();
   after(async () => {
     try {
       await compute.dispatch(jobId);
     } catch (err) {
-      await advance(store, jobId, "failed", `Pipeline error: ${(err as Error).message}`, {
+      await advance(store, jobId, "failed", `Generation error: ${(err as Error).message}`, {
         error: (err as Error).message,
       });
     }

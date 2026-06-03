@@ -1,24 +1,21 @@
 import type { ModerationResult } from "@/lib/jobs/types";
 
 /**
- * Safety gate that runs BEFORE any GPU spend. In production the real check is
- * NudeNet (an open-source NSFW image classifier) sampling frames inside the
- * Modal worker; its verdict flows back through this same ModerationResult shape.
- *
- * Locally we can't run the model, so this is a cheap, demonstrable heuristic:
- * filenames hinting at disallowed content trip the gate, which lets you show the
- * "rejected before the model" path in the UI without any ML. Replace/augment,
- * never rely on filename checks in production.
+ * Prompt safety gate that runs BEFORE generation (no model spend on rejects).
+ * This is a cheap keyword heuristic — enough to block obvious NSFW/harmful
+ * prompts and to demo the "rejected before the model" path. A production build
+ * would add a real text-moderation model. Note: Pollinations also enforces its
+ * own content policy server-side.
  */
-const BLOCKLIST = ["nsfw", "explicit", "nude", "porn", "gore"];
+const BLOCKLIST = ["nsfw", "explicit", "nude", "naked", "porn", "sex", "gore", "child", "cp ", "underage"];
 
-export async function moderateUpload(filenames: string[]): Promise<ModerationResult> {
-  const haystack = filenames.join(" ").toLowerCase();
-  const hit = BLOCKLIST.find((term) => haystack.includes(term));
+export async function moderatePrompt(prompt: string): Promise<ModerationResult> {
+  const text = ` ${prompt.toLowerCase()} `;
+  const hit = BLOCKLIST.find((term) => text.includes(term));
   if (hit) {
     return {
       flagged: true,
-      reason: `Upload blocked by safety filter (matched "${hit}"). NSFW and harmful content is not allowed.`,
+      reason: `Prompt blocked by the safety filter (matched "${hit.trim()}"). NSFW and harmful content isn't allowed.`,
       score: 0.99,
     };
   }

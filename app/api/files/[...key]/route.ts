@@ -68,30 +68,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ key: str
   });
 }
 
-/**
- * PUT /api/files/[...key] — direct upload target for the LOCAL storage backend,
- * so the browser uses the same presigned-style upload flow it uses for R2.
- */
-export async function PUT(req: Request, { params }: { params: Promise<{ key: string[] }> }) {
-  const { key } = await params;
-  const rel = key.map(decodeURIComponent).join("/");
-  const root = path.join(config.dataDir, "blobs");
-  const file = path.join(root, rel);
-
-  if (!file.startsWith(root + path.sep)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
-  const data = Buffer.from(await req.arrayBuffer());
-  if (data.length > config.maxUploadBytes) {
-    return new Response("Payload too large", { status: 413 });
-  }
-
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, data);
-  return new Response(null, { status: 200 });
-}
-
 function toArrayBuffer(buf: Buffer): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }

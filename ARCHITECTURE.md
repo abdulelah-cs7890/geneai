@@ -1,87 +1,62 @@
 # Architecture & decisions
 
-This documents *why* the system looks the way it does — the part worth talking
-through in an interview.
+Why the system looks the way it does — the part worth talking through in an
+interview.
 
-## 1. The core problem: V2V is slow, so the request can't be
+## 1. Async job queue (even though generation is fast)
 
-Full-body motion transfer takes **minutes** on a GPU. A synchronous HTTP request
-would time out and a single render would pin a server. So the whole design is
-**async job-oriented**:
+A `POST /api/jobs` accepts a prompt, runs the safety gate, persists a `queued`
+job, **backgrounds** the work via Next's `after()`, and returns immediately. The
+browser **polls** `GET /api/jobs/[id]` and renders a live state machine
+(`queued → moderating → generating → done`) — see [lib/jobs/types.ts](lib/jobs/types.ts).
 
-1. `POST /api/jobs` accepts the upload, runs the safety gate, persists a `queued`
-   job, **dispatches** compute, and returns immediately.
-2. Compute advances the job through an explicit **state machine**
-   (`moderating → normalizing → extracting_pose → generating → stitching → done`)
-   — see [`lib/jobs/types.ts`](lib/jobs/types.ts).
-3. The browser **polls** `GET /api/jobs/[id]` and renders a live, honest
-   stage-by-stage timeline. (Polling over SSE/WebSockets keeps it serverless- and
-   Vercel-friendly; the state machine is transport-agnostic, so swapping to SSE is
-   a UI change, not a backend one.)
-
-The slowness isn't hidden — it's the feature that justifies the architecture.
+FLUX generation is only a few seconds, so this could be synchronous — but the
+queue keeps the API instant, gives honest progress UI, gracefully absorbs the
+image provider's latency/rate-limits, and means the exact same shape scales to a
+slower model later without touching the frontend.
 
 ## 2. Swappable backends (the key idea)
 
-Every external dependency sits behind a small interface with **two
-implementations**, selected from env in one place ([`lib/config.ts`](lib/config.ts)):
+Every external dependency sits behind a small interface with multiple
+implementations, selected from env in one place ([lib/config.ts](lib/config.ts)):
 
-| Concern  | Interface                        | Local            | Cloud           |
-| -------- | -------------------------------- | ---------------- | --------------- |
-| Job store| [`JobStore`](lib/jobs/store.ts)  | file `./data`    | Upstash Redis   |
-| Storage  | [`Storage`](lib/storage/index.ts)| disk             | Cloudflare R2   |
-| Compute  | [`ComputeBackend`](lib/compute/index.ts) | FFmpeg mock | Modal GPU |
+| Concern  | Interface                          | Local        | Cloud                 |
+| -------- | ---------------------------------- | ------------ | --------------------- |
+| Job store| [`JobStore`](lib/jobs/store.ts)    | file `./data`| Upstash / Supabase    |
+| Storage  | [`Storage`](lib/storage/index.ts)  | disk         | Supabase / R2         |
+| Compute  | [`ComputeBackend`](lib/compute/index.ts) | Pollinations FLUX | (add any image model) |
 
-Payoff:
+Payoff: **zero-setup local dev** (no accounts, no keys), **incremental promotion**
+to the cloud one env var at a time, and a compute layer where swapping the image
+model is a single new class.
 
-- **Develops with zero setup** — no GPU, no Redis, no S3, no API keys. `npm run
-  dev` is a full working demo.
-- **Promotes incrementally** — turn on Redis, then R2, then Modal, one env var at
-  a time, de-risking the path to a live demo.
-- **Same state machine everywhere** — the mock walks the identical stages the GPU
-  worker does, so the local demo faithfully represents production.
+## 3. Why these specific services (all free, no card)
 
-## 3. Why these specific services
+- **Pollinations FLUX** for generation: FLUX-grade quality, free, no signup, simple
+  HTTP. Called server-side from the job's `after()` callback, well inside Vercel's
+  60s function budget.
+- **Supabase** for storage **and** job state: one free project (Postgres + public
+  Storage bucket), no credit card.
+- **Vercel** for the app: free, co-locates the API with the UI.
+- **Upstash Redis** (optional) for the rate-limit + daily-cap guards.
 
-- **Modal** for GPU: serverless, bills **only while a job runs** (idle = $0), so a
-  free credit budget covers a demo. The app dispatches via one HTTP call; Modal
-  runs the job detached and reports back via webhook.
-- **Cloudflare R2** for blobs: **zero egress fees** — decisive for high-bandwidth
-  video delivery on a tight budget. Signed via tiny `aws4fetch`, no aws-sdk bloat.
-- **Upstash Redis** for job state: serverless + HTTP, so it works from Vercel
-  functions with no connection pooling, and the free tier is plenty.
-- **Vercel** for the frontend: free, and Next.js API routes co-locate the
-  orchestration with the UI.
+## 4. Safety & cost controls
 
-## 4. Cost & safety controls (built in, on purpose)
+- **Prompt safety gate** runs before generation; a rejected prompt never hits the
+  model ([lib/moderation.ts](lib/moderation.ts)).
+- **Per-IP rate limit + global daily cap** ([lib/ratelimit.ts](lib/ratelimit.ts)),
+  dormant without Upstash.
 
-- **Safety gate before GPU** — moderation runs at upload time; a rejected job
-  never reaches the model, so junk can't burn GPU credits. NudeNet in prod, a
-  filename heuristic locally so the reject path is demoable.
-- **Hard duration cap** — enforced at the FFmpeg normalize step (`-t 15`), the
-  cheapest possible stage, so a 60s upload can't become a 60s GPU bill.
-- **Fail-safe webhook** — worker callbacks are authenticated with a shared secret;
-  the worker never lets a webhook failure crash the GPU job.
+## 5. History / honest scope
 
-## 5. What's real vs stubbed
+This started as a video-to-video / face-swap meme tool. Free face-swap quality was
+the dead-end (low-res, uncanny on stylized inputs), so it was pivoted to **prompt →
+FLUX image** — where free quality is genuinely excellent. The async queue, swappable
+backends, storage, guardrails, and glass UI all carried over unchanged; only the
+input (prompt instead of uploads) and the compute backend changed.
 
-**Real and running:** the async queue, state machine, live progress UI, safety
-gate, both storage backends, both job stores, FFmpeg normalization/compositing,
-webhook protocol, and the Modal app scaffold.
-
-**Stubbed (clearly marked):** the two ML stages in
-[`worker/pipeline.py`](worker/pipeline.py) — `_extract_pose` (DWPose) and
-`_motion_transfer` (the diffusion model). They have exact integration points and
-currently pass through / composite so a real mp4 still flows end-to-end.
-
-## 6. Known limitations / next steps
-
-- **Polling → SSE** for lower-latency progress on long jobs.
-- **Local store concurrency**: the file store serializes writes in-process; it's a
-  dev convenience, not for multi-instance use (that's what the Redis store is for).
-- **Refund/retry policy**: V2V fails often; a production build needs credit refunds
-  on `failed` and a bounded auto-retry.
-- **Lip-sync**: swapping the character desyncs the original voice; a real product
-  would add Wav2Lip or lean into the mismatch as a style.
-- **Likeness/consent**: default the character library to licensed or own-likeness
-  images before any public launch.
+## 6. Next steps
+- **Identity mode** (PuLID/InstantID via a free HF token) to put a specific face
+  into a generated scene — a far higher-quality successor to face-swap.
+- **SSE** instead of polling for lower-latency progress.
+- **Image-to-image** (Pollinations `kontext`) to transform an uploaded photo.
