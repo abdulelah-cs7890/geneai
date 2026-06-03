@@ -51,6 +51,16 @@ Every image below was generated straight from a text prompt with FLUX:
   <img src="docs/screenshots/gallery.jpg" width="840" alt="Gallery of FLUX-generated example images" />
 </p>
 
+## 🎲 Just for fun
+
+Real generations, straight from the app — give it the weirdest prompt you can think of:
+
+<p align="center">
+  <img src="docs/screenshots/fun1.jpg" width="265" alt="messi riding a football on a rainy day with an apple on his head" />
+  <img src="docs/screenshots/fun2.jpg" width="265" alt="a raccoon astronaut playing electric guitar on the moon" />
+  <img src="docs/screenshots/fun3.jpg" width="265" alt="a t-rex riding a tiny bicycle through a city street" />
+</p>
+
 ## 🚀 Quick start
 
 ```bash
