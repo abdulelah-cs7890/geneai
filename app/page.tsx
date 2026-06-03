@@ -80,7 +80,8 @@ function Examples() {
     <section id="examples" className="mt-24 scroll-mt-28">
       <h2 className="font-display text-center text-headline-lg">Examples</h2>
       <p className="mx-auto mt-3 max-w-xl text-center text-sm text-outline">
-        Real face-swaps straight from the pipeline (swap + CodeFormer restore). Faces are AI-generated — no real people.
+        A real face swapped onto an AI-generated android — straight from the pipeline (swap + CodeFormer restore). All
+        faces are AI-generated; no real people.
       </p>
       <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
         {items.map((n) => (
@@ -96,7 +97,7 @@ function Examples() {
             <div className="flex items-center gap-2">
               <figure className="flex-1">
                 <img src={`/examples/ex${n}-base.jpg`} alt="base" className="aspect-square w-full rounded-xl object-cover" />
-                <figcaption className="mt-1 text-center text-[10px] uppercase tracking-wide text-outline">Base</figcaption>
+                <figcaption className="mt-1 text-center text-[10px] uppercase tracking-wide text-outline">Robot</figcaption>
               </figure>
               <span className="material-symbols-outlined text-primary">arrow_forward</span>
               <figure className="flex-1">
