@@ -1,79 +1,84 @@
-# GeneAI — AI Image Generator
+<h1 align="center">🌀 GeneAI</h1>
 
-Type a prompt, get a high-quality AI image in seconds. Built on a real **async job
-queue** with swappable serverless backends, powered by **FLUX** (Pollinations) —
-**free, no sign-up, no credit card.**
+<p align="center">
+  <b>Type a prompt → get a high-quality AI image in seconds.</b><br/>
+  A FLUX image generator built on a real async job queue — <b>free, no sign-up, no credit card.</b>
+</p>
 
-> **Runs on a laptop with zero setup.** With no env configured it uses a
-> file-backed job store + on-disk storage, so `npm run dev` is a full working demo.
-> Set a couple of env vars to promote storage/job-state to the cloud.
+<p align="center">
+  <a href="https://geneai-git-main-abdulelah-cs7890s-projects.vercel.app"><b>▶ Live demo</b></a>
+  &nbsp;·&nbsp; <a href="#-quick-start">Quick start</a>
+  &nbsp;·&nbsp; <a href="ARCHITECTURE.md">Architecture</a>
+  &nbsp;·&nbsp; <a href="DEPLOY.md">Deploy</a>
+</p>
 
-🔗 Live demo: deploy to Vercel (see [DEPLOY.md](DEPLOY.md)).
+<p align="center">
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white" />
+  <img alt="FLUX" src="https://img.shields.io/badge/FLUX-Cloudflare%20Workers%20AI-f38020?logo=cloudflare&logoColor=white" />
+  <img alt="cost" src="https://img.shields.io/badge/cost-%240%20·%20no%20card-22c55e" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/hero.jpg" width="840" alt="GeneAI studio — prompt, style presets, aspect ratio" />
+</p>
 
 ---
 
-## Quick start
+## What it does
+
+Describe anything, pick a style + aspect, and GeneAI renders it with **FLUX** — a real,
+high-quality image, generated in seconds. No uploads, no accounts.
+
+<p align="center">
+  <img src="docs/screenshots/result.jpg" width="560" alt="A generated image: a corgi astronaut skateboarding on the moon" />
+</p>
+
+## Features
+
+- 🎨 **FLUX-grade quality** — text → image via Cloudflare Workers AI (free tier, no card).
+- ⚡ **Real async pipeline** — a job queue with a live `queued → generating → done` timeline (not a fake spinner).
+- 🧩 **Swappable backends** — job store, storage, and image engine are each env-selected; runs locally with zero setup.
+- 🛟 **Browser fallback** — if no engine is configured, the visitor's browser generates on its own IP, so it always works.
+- 🛡️ **Guardrails** — prompt safety gate + per-IP rate limit + daily cap.
+- 💅 **Glassmorphism UI** — Tailwind v4, Space Grotesk + Inter, lime/cyan theme.
+
+## Examples
+
+Every image below was generated straight from a text prompt with FLUX:
+
+<p align="center">
+  <img src="docs/screenshots/gallery.jpg" width="840" alt="Gallery of FLUX-generated example images" />
+</p>
+
+## 🚀 Quick start
 
 ```bash
 npm install
 npm run dev          # open the printed http://localhost:PORT
 ```
 
-Type a prompt (or tap an idea chip), pick a style + aspect, hit **Generate**.
-A safety filter screens the prompt, the job runs through the queue, and a FLUX
-image lands back with a live progress timeline. Try a prompt containing `nsfw` to
-see the **safety gate** reject it before generation.
+With **zero config** it runs fully locally (file-backed job store + on-disk storage) and
+generates via the browser fallback. Set a couple of env vars to go cloud — see
+[DEPLOY.md](DEPLOY.md) (Supabase + Vercel + Cloudflare, all free, no card).
 
----
-
-## Architecture
+## How it works
 
 ```
- Browser ──prompt──▶ Next.js API (Vercel) ──▶ Job Store ◀── poll ── Browser
-   │                      │                   (local file / Upstash / Supabase)
-   │                      ├── moderate prompt (safety gate)
-   │                      └── after(): Compute.dispatch()
-   │                                      │
-   │                            Pollinations FLUX  (text → image)
-   │                                      │
-   │                            Blob Storage (local disk / Supabase / R2)
-   └──◀ image ◀──────────────────────────┘
+ Browser ──prompt──▶ Next.js API ──▶ moderate ──▶ Job Store ◀── poll ── Browser
+                          │                       (file / Upstash / Supabase)
+                          └─ after(): Compute ──▶ FLUX (Cloudflare) ──▶ Storage
+                                                                        (disk / Supabase / R2)
 ```
 
-- **Async job queue + state machine** (`queued → moderating → generating → done`)
-  with live polling — see [lib/jobs/](lib/jobs/). Generation runs in the background
-  via Next's `after()`, so the API responds instantly.
-- **Swappable backends**, env-selected in [lib/config.ts](lib/config.ts):
-  job store (file / Upstash / Supabase) and storage (disk / Supabase / R2).
-- **Compute**: [lib/compute/pollinations-compute.ts](lib/compute/pollinations-compute.ts)
-  calls Pollinations FLUX and stores the result. Swapping in another image model
-  is a single new `ComputeBackend`.
-- **Guardrails**: per-IP rate limit + a daily cap ([lib/ratelimit.ts](lib/ratelimit.ts)),
-  and a prompt safety gate ([lib/moderation.ts](lib/moderation.ts)).
+| Concern   | Interface                                | Local        | Cloud                |
+| --------- | ---------------------------------------- | ------------ | -------------------- |
+| Job store | [`JobStore`](lib/jobs/store.ts)          | file `./data`| Upstash / Supabase   |
+| Storage   | [`Storage`](lib/storage/index.ts)        | disk         | Supabase / R2        |
+| Image     | [`ComputeBackend`](lib/compute/index.ts) | browser FLUX | Cloudflare FLUX      |
 
----
-
-## Project layout
-
-```
-app/
-  api/jobs/            create (prompt) + list + status (polling)
-  api/files/           local blob serving (dev only)
-  page.tsx             studio UI + examples gallery + how-it-works
-components/Studio.tsx  prompt → style/aspect → progress → result image
-lib/
-  config.ts            env-driven backend selection
-  jobs/                Job types, state machine, store (local/Upstash/Supabase)
-  storage/             blob storage (local / Supabase / R2)
-  compute/             Pollinations FLUX backend
-  styles.ts            style presets + aspect sizing
-  moderation.ts        prompt safety gate
-scripts/
-  smoke.mjs            end-to-end test (npm run smoke)
-  gen-examples.mjs     regenerate the gallery images
-```
-
----
+Generation runs in the background via Next's `after()`, so the API responds instantly and
+the UI polls for progress. More in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Testing
 
@@ -81,7 +86,19 @@ scripts/
 npm run dev
 npm run smoke -- http://localhost:3000   # use the port next dev prints
 ```
-Creates a real job, polls to `done`, asserts the result is an image, and confirms
-the NSFW reject path. Point it at the live URL to smoke-test production.
 
-Deploy: see **[DEPLOY.md](DEPLOY.md)** (Supabase + Vercel, both free, no card).
+Creates a real job, drives it to `done`, asserts the result is an image, and confirms the
+NSFW reject path. Point it at the live URL to smoke-test production.
+
+## Project layout
+
+```
+app/         page.tsx (studio + gallery), api/jobs (create/list/status), api/files (local)
+components/  Studio.tsx — prompt → progress → result
+lib/         config (backend selection), jobs (queue + state machine), storage, compute, styles, moderation
+scripts/     smoke.mjs (e2e test), gen-examples.mjs (regenerate gallery)
+```
+
+---
+
+<p align="center"><sub>Built with Next.js · Tailwind v4 · Cloudflare Workers AI · Supabase · Vercel — entirely on free, no-card infrastructure.</sub></p>
