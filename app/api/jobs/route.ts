@@ -6,6 +6,7 @@ import { advance, getJobStore } from "@/lib/jobs/store";
 import type { Job } from "@/lib/jobs/types";
 import { moderatePrompt } from "@/lib/moderation";
 import { consumeDailyQuota, rateLimit } from "@/lib/ratelimit";
+import { buildPollinationsUrl } from "@/lib/styles";
 
 export const runtime = "nodejs";
 // The FLUX call runs in the background via after(); give it room on Vercel.
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
     createdAt: now,
     updatedAt: now,
     options,
-    backend: "pollinations",
+    backend: config.imageEngine,
     logs: [{ at: now, stage: "moderating", message: "Screening the prompt…" }],
   };
 
@@ -69,13 +70,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ job: rejected }, { status: 200 });
   }
 
+  // Browser-fallback: hand the client a Pollinations URL to load on its own IP
+  // (no server-side fetch → avoids Vercel's shared-IP rate limit). No storage.
+  if (config.imageEngine === "browser") {
+    const job = await store.create({
+      ...base,
+      status: "generating",
+      progress: 60,
+      moderation,
+      clientUrl: buildPollinationsUrl(prompt, options),
+      logs: [...base.logs, { at: Date.now(), stage: "generating", message: "Generating in your browser…" }],
+    });
+    return NextResponse.json({ job }, { status: 201 });
+  }
+
+  // Cloudflare: generate server-side in the background; the UI polls for the result.
   await store.create({
     ...base,
     moderation,
     logs: [...base.logs, { at: Date.now(), stage: "queued", message: "Prompt cleared. Queued for generation." }],
   });
-
-  // Background the FLUX call so the API responds immediately and the UI polls.
   const compute = await getCompute();
   after(async () => {
     try {

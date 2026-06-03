@@ -53,7 +53,10 @@ export interface Job {
 
   options: JobOptions;
   /** Which compute backend handled it. */
-  backend: "pollinations";
+  backend: "cloudflare" | "browser";
+
+  /** Browser-fallback only: the image URL the client loads directly (its own IP). */
+  clientUrl?: string;
 
   // outputs / diagnostics
   result?: JobAsset;

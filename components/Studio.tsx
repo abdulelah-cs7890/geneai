@@ -51,7 +51,9 @@ export function Studio() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Generation failed.");
       setJob(data.job);
-      if (!isTerminal(data.job.status)) startPolling(data.job.id);
+      // Cloudflare mode → poll for the server result. Browser mode → a hidden
+      // <img> preloader (below) drives completion on the visitor's own IP.
+      if (!data.job.clientUrl && !isTerminal(data.job.status)) startPolling(data.job.id);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -83,7 +85,29 @@ export function Studio() {
 
   // ---- Tracking ----------------------------------------------------------
   if (job && job.status !== "rejected" && !isTerminal(job.status)) {
-    return <Tracking job={job} />;
+    return (
+      <>
+        <Tracking job={job} />
+        {/* Browser-fallback: load the image on the visitor's own IP; onLoad → done. */}
+        {job.clientUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={job.clientUrl}
+            alt=""
+            className="hidden"
+            onLoad={() =>
+              setJob((j) =>
+                j ? { ...j, status: "done", progress: 100, result: { key: "", url: j.clientUrl!, contentType: "image/jpeg" } } : j,
+              )
+            }
+            onError={() => {
+              setError("Generation failed — please try again.");
+              setJob(null);
+            }}
+          />
+        )}
+      </>
+    );
   }
 
   // ---- Rejected / failed -------------------------------------------------

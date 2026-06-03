@@ -28,10 +28,17 @@ export const config = {
         ? ("r2" as const)
         : ("local" as const),
 
-  /** Pollinations FLUX image endpoint (free, no card, no signup). */
-  pollinationsBase: process.env.POLLINATIONS_BASE ?? "https://image.pollinations.ai",
-  /** Optional Pollinations token for higher limits / no watermark (still no card). */
-  pollinationsToken: process.env.POLLINATIONS_TOKEN,
+  /**
+   * Image engine: Cloudflare Workers AI FLUX if configured (reliable, per-account
+   * token, free no-card), else "browser" — the client loads a Pollinations FLUX
+   * image directly on the visitor's own IP (avoids Vercel's shared-IP rate limit).
+   */
+  imageEngine:
+    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
+      ? ("cloudflare" as const)
+      : ("browser" as const),
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN,
 
   /** Local scratch dir for the file-backed store + disk storage (gitignored). */
   dataDir: path.join(process.cwd(), "data"),

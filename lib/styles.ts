@@ -1,4 +1,4 @@
-import type { Aspect } from "./jobs/types";
+import type { Aspect, JobOptions } from "./jobs/types";
 
 /** Client-safe style presets + aspect sizing, shared by the UI and the worker. */
 
@@ -30,3 +30,22 @@ export const ASPECT_SIZE: Record<Aspect, { w: number; h: number }> = {
   "9:16": { w: 768, h: 1344 },
   "16:9": { w: 1344, h: 768 },
 };
+
+/**
+ * Build a Pollinations FLUX image URL for the prompt + options. Used by the
+ * browser-fallback engine: the client loads this directly on its own IP, which
+ * sidesteps Vercel's shared-IP rate limit. Pure + client-safe (no secrets).
+ */
+export function buildPollinationsUrl(prompt: string, options: JobOptions): string {
+  const { w, h } = ASPECT_SIZE[options.aspect] ?? ASPECT_SIZE["1:1"];
+  const full = prompt + styleSuffix(options.style);
+  const params = new URLSearchParams({
+    width: String(w),
+    height: String(h),
+    model: "flux",
+    nologo: "true",
+    enhance: "true",
+    seed: String(Math.floor(Math.random() * 1_000_000)),
+  });
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?${params.toString()}`;
+}
